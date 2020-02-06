@@ -14,6 +14,22 @@ const getGenres = async (format) => {
   return data.genres;
 }
 
+const getOMDbRatings = async (IMDbId) => {
+  const OMDbData = await fetch(`${OMDbUrl}/?apiKey=${OMDbApiKey}&i=${IMDbId}`)
+    .then(res => res.json());
+  let rt_score;
+  if (OMDbData.Ratings && OMDbData.Ratings.length) {
+    rt_score = OMDbData.Ratings.find(item => item.Source === 'Rotten Tomatoes');
+    rt_score = rt_score && rt_score.Value;
+  }
+  return { 
+    imdb_rating: OMDbData.imdbRating,
+    imdb_votes: OMDbData.imdbVotes,
+    meta_score: OMDbData.Metascore,
+    rt_score
+  };
+}
+
 const getTMDbSearchData = async (format, query, page) => {
   let params = `&page=${page}&query=${query}`;
   let data = await fetch(`${TMDbUrl}/search/${format}?api_key=${TMDbApiKey}${params}`)
@@ -51,28 +67,30 @@ const getTMDbNormalData = async (format, genres, rating, fromYear, toYear, page,
 }
 
 const getTMDbDetails = async (format, id) => {
-  const details = await fetch(`${TMDbUrl}/movie/${id}?api_key=${TMDbApiKey}`)
+  const details = await fetch(`${TMDbUrl}/${format}/${id}?api_key=${TMDbApiKey}`)
     .then(res => res.json());
-  const externalIds = await fetch(`${TMDbUrl}/movie/${id}/external_ids?api_key=${TMDbApiKey}`)
+  const externalIds = await fetch(`${TMDbUrl}/${format}/${id}/external_ids?api_key=${TMDbApiKey}`)
     .then(res => res.json());
-  const credits = await fetch(`${TMDbUrl}/movie/${id}/credits?api_key=${TMDbApiKey}`)
+  const credits = await fetch(`${TMDbUrl}/${format}/${id}/credits?api_key=${TMDbApiKey}`)
     .then(res => res.json());
-  const keywords = await fetch(`${TMDbUrl}/movie/${id}/keywords?api_key=${TMDbApiKey}`)
+  const keywords = await fetch(`${TMDbUrl}/${format}/${id}/keywords?api_key=${TMDbApiKey}`)
     .then(res => res.json());
-  const recommendations = await fetch(`${TMDbUrl}/movie/${id}/recommendations?api_key=${TMDbApiKey}`)
+  const recommendations = await fetch(`${TMDbUrl}/${format}/${id}/recommendations?api_key=${TMDbApiKey}`)
     .then(res => res.json());
-  const videos = await fetch(`${TMDbUrl}/movie/${id}/videos?api_key=${TMDbApiKey}`)
+  const videos = await fetch(`${TMDbUrl}/${format}/${id}/videos?api_key=${TMDbApiKey}`)
     .then(res => res.json());
   const casts = credits.cast.slice(0, 10),
-    video = videos.results.find(item => item.site === 'Youtube' && item.type === 'Trailer');
+    video = videos.results.find(item => item.site === 'YouTube' && item.type === 'Trailer');
+  const ratings = externalIds.imdb_id && await getOMDbRatings(externalIds.imdb_id);  
   const baseInfo = {
-    ...details, ...externalIds, casts, video, 
-    keywords: keywords.keywords,
+    ...details, ...externalIds, ...ratings,
+    casts, video, 
+    keywords: format === 'movie' ? keywords.keywords : keywords.results,
     recommendations: recommendations.results,
   }
   if (format === 'movie') {
     const directors = credits.crew.filter(item => item.job === 'Director'),
-      writers = credits.crew.filter(item => item.job === 'Writer')
+      writers = credits.crew.filter(item => item.department === 'Writing')
     return {...baseInfo, directors, writers}
   } else {
     const producers = credits.crew.filter(item => item.job === 'Executive Producer');
@@ -99,24 +117,13 @@ const getFullData = async (format, genres, rating, fromYear, toYear, page, query
         item = {...item, poster_path};
       }
       if (item.imdb_id) {
-        let OMDbData = await fetch(`${OMDbUrl}/?apiKey=${OMDbApiKey}&i=${item.imdb_id}`)
-          .then(res => res.json());
-        let rt_score;
-        if (OMDbData.Ratings && OMDbData.Ratings.length) {
-          rt_score = OMDbData.Ratings.find(item => item.Source === 'Rotten Tomatoes');
-          rt_score = rt_score && rt_score.Value;
-        }
-        item = {
-          ...item, 
-          imdb_rating: OMDbData.imdbRating,
-          meta_score: OMDbData.Metascore,
-          rt_score
-        };
+        const OMDbRatings = await getOMDbRatings(item.imdb_id);
+        item = {...item, ...OMDbRatings};
       }
-      return item;
+      return {...item, format};
     })
   );
-  return { data: fetchedData, total_results: TMDbResponse.totalResults } ;
+  return { data: fetchedData, total_results: TMDbResponse.totalResults };
 }
 
 module.exports = { getFullData, getGenres, getTMDbDetails }
