@@ -18,13 +18,13 @@ const getTMDbSearchData = async (format, query, page) => {
   let params = `&page=${page}&query=${query}`;
   let data = await fetch(`${TMDbUrl}/search/${format}?api_key=${TMDbApiKey}${params}`)
     .then(res => res.json());
-  return { totalResults: data.total_results, data: data.results };
+  return data;
 }
 
 const getTMDbTrendingData = async (format, page) => {
   let data = await fetch(`${TMDbUrl}/trending/${format}/day?api_key=${TMDbApiKey}&page=${page}`)
     .then(res => res.json());
-  return { totalResults: data.total_results, data: data.results };
+  return data;
 }
 
 const getTMDbNormalData = async (format, genres, rating, fromYear, toYear, page, withQuery, tab) => {
@@ -50,7 +50,7 @@ const getTMDbNormalData = async (format, genres, rating, fromYear, toYear, page,
   }
   const data = await fetch(`${TMDbUrl}/${format}/${tab}?api_key=${TMDbApiKey}${params}`)
     .then(res => res.json());
-  return { totalResults: data.total_results, data: data.results };
+  return data;
 }
 
 const getOMDbRatings = async (IMDbId) => {
@@ -93,9 +93,13 @@ const getFullData = async (format, genres, rating, fromYear, toYear, page, withQ
     TMDbResponse = await getTMDbTrendingData(format, page);
   }
   let fetchedData = await Promise.all(
-    TMDbResponse.data.map(async item => await getAddiionalDetails(format, item))
+    TMDbResponse.results.map(async item => await getAddiionalDetails(format, item))
   );
-  return { data: fetchedData, total_results: TMDbResponse.totalResults };
+  return { 
+    data: fetchedData,
+    total_results: TMDbResponse.total_results,
+    total_pages: TMDbResponse.total_pages
+  };
 }
 
 const getTMDbDetails = async (format, id) => {
